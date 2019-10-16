@@ -1,0 +1,18 @@
+---
+
+# Change these variables!
+ufv_fqdn: ""
+ufv_dir: ""
+ufv_container_name: ""
+certbot_admin_email: ""
+
+ufv_cert_dir: "{{ ufv_dir }}/certificates"
+ufv_docker_volume: unifi-video-volume
+ufv_docker_volume_dir: "/var/lib/docker/volumes/{{ ufv_docker_volume }}/_data"
+
+le_cert_dir: "/etc/letsencrypt/live/{{ ufv_fqdn }}"
+certbot_create_if_missing: True
+certbot_create_standalone_stop_services: []
+certbot_certs:
+  - domains:
+    - "{{ ufv_fqdn }}"

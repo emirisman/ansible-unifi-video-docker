@@ -1,0 +1,91 @@
+---
+
+- name: Create UFV container
+  include_role:
+    name: container
+  vars:
+    container_name: "{{ ufv_container_name }}"
+    container_image: pducharme/unifi-video-controller
+    container_state: started
+    container_volumes:
+      - "{{ ufv_docker_volume }}:/usr/lib/unifi-video"
+      - "{{ ufv_dir }}:/var/lib/unifi-video"
+      - "{{ ufv_dir }}/videos:/var/lib/unifi-video/videos"
+    container_capabilities:
+      - sys_admin
+      - dac_read_search
+    container_security_opts:
+      - apparmor:unconfined
+    container_ports:
+      - "10001:10001"
+      - "1935:1935"
+      - "6666:6666"
+      - "7080:7080"
+      - "7442:7442"
+      - "7443:7443"
+      - "7444:7444"
+      - "7445:7445"
+      - "7446:7446"
+      - "7447:7447"
+
+- name: Create {{ ufv_cert_dir }} directory
+  file:
+    path: "{{ ufv_cert_dir }}"
+    state: directory
+    owner: 99
+    group: users
+
+- name: Convert LE certificates to required format (PKCS8)
+  command: "{{ item }}"
+  with_items:
+    - "openssl pkcs8 -topk8 -nocrypt -in {{ le_cert_dir }}/privkey.pem
+      -outform DER -out {{ ufv_cert_dir }}/ufv-server.key.der"
+    - "openssl x509 -outform der -in {{ le_cert_dir }}/fullchain.pem
+      -out {{ ufv_cert_dir }}/ufv-server.cert.der"
+
+- name: Remove UFV self-signed certificates
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ ufv_dir }}/ufv-truststore"
+    - "{{ ufv_dir }}/keystore"
+    - "{{ ufv_docker_volume_dir }}/conf/evostream/server.key"
+    - "{{ ufv_docker_volume_dir }}/conf/evostream/server.crt"
+    - "{{ ufv_docker_volume_dir }}/conf/evostream/server.xml"
+
+- name: Set ownership of {{ ufv_cert_dir }} recursively
+  file:
+    path: "{{ ufv_cert_dir }}"
+    recurse: True
+    owner: 99
+    group: users
+
+- name: Enable custom certs in ufv system.properties
+  lineinfile:
+    path: "{{ ufv_dir }}/system.properties"
+    line: ufv.custom.certs.enable=true
+    state: present
+    insertafter: EOF
+
+- name: Restart {{ ufv_container_name }} container to use LE certs
+  command: "docker restart {{ ufv_container_name }}"
+
+
+### Crontab entries
+
+- name: Add crontab entry for certificate renewal
+  tags: ufv-crontab
+  cron:
+    name: "{{ item.name }} (UFV)"
+    user: "{{ ansible_ssh_user }}"
+    minute: "{{ item.minute }}"
+    hour: 10
+    day: 1
+    job: "sudo {{ item.job }}"
+  with_items:
+    - {name: "Force-renew LE certificates", minute: 0, job: "letsencrypt renew --force-renewal"}
+    - {name: "Convert certificates step 1", minute: 5, job: "openssl pkcs8 -topk8 -nocrypt -in {{ le_cert_dir }}/privkey.pem -outform DER -out {{ ufv_cert_dir }}/ufv-server.key.der"}
+    - {name: "Convert certificates step 2", minute: 6, job: "openssl x509 -outform der -in {{ le_cert_dir }}/fullchain.pem -out {{ ufv_cert_dir }}/ufv-server.cert.der"}
+    - {name: "Set ownership of certificates", minute: 7, job: "chown -R 99:users {{ ufv_cert_dir }}"}
+    - {name: "Restart container", minute: 8, job: "docker restart {{ ufv_container_name }}"}

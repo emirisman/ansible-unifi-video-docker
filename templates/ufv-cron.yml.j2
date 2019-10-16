@@ -1,0 +1,11 @@
+# Added by Ansible UFV role
+
+# Force-renew LE certificates
+0 10 1 * * sudo letsencrypt renew --force-renewal
+# Convert certificates to required format for UFV
+5 10 1 * * openssl pkcs8 -topk8 -nocrypt -in {{ le_cert_dir }}/privkey.pem -outform DER -out {{ ufv_cert_dir }}/ufv-server.key.der
+6 10 1 * * openssl x509 -outform der -in {{ le_cert_dir }}/fullchain.pem -out {{ ufv_cert_dir }}/ufv-server.cert.der
+# Set ownership of certificates
+7 10 1 * * sudo chown -R 99:users {{ ufv_cert_dir }}
+# Restart container to use new certificates
+8 10 1 * * sudo docker restart {{ container_name }}
