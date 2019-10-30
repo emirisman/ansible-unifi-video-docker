@@ -1,22 +1,25 @@
 ---
 
+- name: Pull pducharme/unifi-video-controller image
+  docker_image:
+    name: pducharme/unifi-video-controller
+    pull: True
+
 - name: Create UFV container
-  include_role:
-    name: container
-  vars:
-    container_name: "{{ ufv_container_name }}"
-    container_image: pducharme/unifi-video-controller
-    container_state: started
-    container_volumes:
+  docker_container:
+    name: "{{ ufv_container_name }}"
+    image: pducharme/unifi-video-controller
+    state: started
+    volumes:
       - "{{ ufv_docker_volume }}:/usr/lib/unifi-video"
       - "{{ ufv_dir }}:/var/lib/unifi-video"
       - "{{ ufv_dir }}/videos:/var/lib/unifi-video/videos"
-    container_capabilities:
+    capabilities:
       - sys_admin
       - dac_read_search
-    container_security_opts:
+    security_opts:
       - apparmor:unconfined
-    container_ports:
+    ports:
       - "10001:10001"
       - "1935:1935"
       - "6666:6666"
